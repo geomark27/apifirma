@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { useBreadcrumbs } from '@/hooks/use-breadcrumbs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type User, type Role, type PageProps, type PaginatedUsers } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
@@ -20,19 +21,9 @@ interface UserIndexProps extends PageProps
     }
 }
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin Dashboard',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Usuarios',
-        href: '/admin/users',
-    },
-];
-
-export default function UsersIndex({ users, roles, filters, flash}: UserIndexProps) 
-{
+export default function UsersIndex({ users, roles, filters, flash}: UserIndexProps) {
+    const { adminBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = adminBreadcrumbs.users.index();
     const [search, setSearch] = useState(filters.search || '');
     const [selectedRole, setSelectedRole] = useState(filters.role || '');
 
@@ -138,6 +129,30 @@ export default function UsersIndex({ users, roles, filters, flash}: UserIndexPro
                                         {role.display_name}
                                     </option>
                                 ))}
+                            </select>
+                        </div>
+
+                        <div className="min-w-[200px]">
+                            <label className="text-sm font-medium mb-2 block">Ordenar por</label>
+                            <select
+                                value={filters.sort || 'oldest'}
+                                onChange={(e) => {
+                                    router.get('/admin/users', {
+                                        ...filters,
+                                        sort: e.target.value
+                                    }, {
+                                        preserveState: true,
+                                        replace: true,
+                                    });
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="oldest">Más antiguos primero</option>
+                                <option value="newest">Más recientes primero</option>
+                                <option value="name_asc">Nombre A-Z</option>
+                                <option value="name_desc">Nombre Z-A</option>
+                                <option value="email_asc">Email A-Z</option>
+                                <option value="email_desc">Email Z-A</option>
                             </select>
                         </div>
 

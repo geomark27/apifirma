@@ -1,7 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
-use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\RoleController;  // ← Agregar esta línea
 use App\Http\Controllers\User\DashboardController as UserDashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -27,14 +28,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
             return redirect()->route('user.dashboard');
         }
         
-        // Si no tiene ningún rol específico, mostrar dashboard básico
         return Inertia::render('dashboard');
     })->name('dashboard');
 
     // Rutas para ADMIN
     Route::middleware(['role:admin'])->prefix('admin')->name('admin.')->group(function () {
+        // Dashboard de admin
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
-        Route::resource('users', UserController::class)->except(['show']);
+        
+        // Gestión de usuarios (CRUD completo)
+        Route::resource('users', AdminController::class)->except(['show']);
+        
+        // Gestión de roles (Index, Edit, Permisos) ← AGREGAR ESTAS LÍNEAS
+        Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::get('roles/{role}/edit', [RoleController::class, 'edit'])->name('roles.edit');
+        Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
+        
+        // Gestión de permisos de roles
+        Route::get('roles/{role}/permissions', [RoleController::class, 'permissions'])->name('roles.permissions');
+        Route::put('roles/{role}/permissions', [RoleController::class, 'updatePermissions'])->name('roles.permissions.update');
+        
+        // Estadísticas de rol (opcional - para futuro)
+        Route::get('roles/{role}/stats', [RoleController::class, 'stats'])->name('roles.stats');
     });
 
     // Rutas para USER

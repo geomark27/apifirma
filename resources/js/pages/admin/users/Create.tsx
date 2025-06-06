@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useBreadcrumbs } from '@/hooks/use-breadcrumbs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Role, type PageProps } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -15,22 +16,9 @@ interface CreateUserProps extends PageProps
     roles: Role[];
 }
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin Dashboard',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Usuarios',
-        href: '/admin/users',
-    },
-    {
-        title: 'Crear Usuario',
-        href: '/admin/users/create',
-    },
-];
-
 export default function CreateUser({ roles }: CreateUserProps) {
+    const { adminBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = adminBreadcrumbs.users.create();
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
 
@@ -203,7 +191,7 @@ export default function CreateUser({ roles }: CreateUserProps) {
                                 {roles.map((role) => (
                                     <div
                                         key={role.id}
-                                        className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
+                                        className="flex items-start space-x-3 p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <Checkbox
                                             id={`role-${role.id}`}
@@ -220,7 +208,7 @@ export default function CreateUser({ roles }: CreateUserProps) {
                                                 {role.display_name}
                                             </label>
                                             {role.description && (
-                                                <p className="text-xs text-gray-500 mt-1">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                     {role.description}
                                                 </p>
                                             )}

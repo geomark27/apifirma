@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useBreadcrumbs } from '@/hooks/use-breadcrumbs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Role, type User, type PageProps } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -16,22 +17,9 @@ interface EditUserProps extends PageProps
     roles: Role[];
 }
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Admin Dashboard',
-        href: '/admin/dashboard',
-    },
-    {
-        title: 'Usuarios',
-        href: '/admin/users',
-    },
-    {
-        title: 'Editar Usuario',
-        href: '#',
-    },
-];
-
 export default function EditUser({ user, roles }: EditUserProps) {
+    const { adminBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = adminBreadcrumbs.users.edit();
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
 
@@ -94,7 +82,7 @@ export default function EditUser({ user, roles }: EditUserProps) {
                 {/* Información del Usuario */}
                 <Card className="p-4 bg-blue-50 border-blue-200">
                     <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">
+                        <div className="mt-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-mono text-gray-900 dark:text-gray-100">
                             {user.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -231,8 +219,8 @@ export default function EditUser({ user, roles }: EditUserProps) {
                                     return (
                                         <div
                                             key={role.id}
-                                            className={`flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 ${
-                                                isChecked ? 'bg-blue-50 border-blue-200' : ''
+                                            className={`flex items-start space-x-3 p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                                                isChecked ? 'border-blue-200' : ''
                                             }`}
                                         >
                                             <Checkbox
@@ -255,7 +243,7 @@ export default function EditUser({ user, roles }: EditUserProps) {
                                                     )}
                                                 </label>
                                                 {role.description && (
-                                                    <p className="text-xs text-gray-500 mt-1">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                         {role.description}
                                                     </p>
                                                 )}

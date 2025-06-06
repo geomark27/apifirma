@@ -1,4 +1,4 @@
-// resources/js/pages/User/Dashboard.tsx
+// resources/js/pages/user/Dashboard.tsx
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';

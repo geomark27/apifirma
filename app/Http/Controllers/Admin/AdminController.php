@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 
-class UserController extends Controller
+class AdminController extends Controller
 {
     /**
      * Mostrar lista de usuarios con paginación
@@ -39,16 +39,34 @@ class UserController extends Controller
             });
         }
 
-        // Paginación con 10 usuarios por página
-        $users = $query->latest()->paginate(10)->withQueryString();
+        $sortBy = $request->get('sort', 'oldest'); // Por defecto: más viejos primero
+        
+        switch ($sortBy) {
+            case 'newest':
+                $query->latest('created_at');
+                break;
+            case 'oldest':
+                $query->oldest('created_at');
+                break;
+            case 'name_asc':
+                $query->orderBy('name', 'asc');
+                break;
+            case 'name_desc':
+                $query->orderBy('name', 'desc');
+                break;
+            case 'email_asc':
+                $query->orderBy('email', 'asc');
+                break;
+            default:
+                $query->oldest('created_at'); // Por defecto: más viejos primero
+        }
 
-        // Obtener todos los roles para el filtro
-        $roles = Role::all(['id', 'name', 'display_name']);
+        $users = $query->paginate(10)->withQueryString();
 
         return Inertia::render('admin/users/Index', [
             'users' => $users,
-            'roles' => $roles,
-            'filters' => $request->only(['search', 'role'])
+            'roles' => Role::all(['id', 'name', 'display_name']),
+            'filters' => $request->only(['search', 'role', 'sort'])
         ]);
     }
 
