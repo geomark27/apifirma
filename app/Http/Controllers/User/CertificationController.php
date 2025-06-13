@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\User;
 
+use App\Http\Controllers\Controller;
 use App\Models\Certification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,7 +47,7 @@ class CertificationController extends Controller
      * Ruta: GET /certifications/create
      */
     public function create()
-    {
+    {   
         return Inertia::render('certifications/Create', [
             'applicationTypes' => Certification::APPLICATION_TYPES,
             'periods' => Certification::PERIODS,

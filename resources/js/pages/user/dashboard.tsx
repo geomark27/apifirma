@@ -1,6 +1,7 @@
 // resources/js/pages/user/Dashboard.tsx
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { useBreadcrumbs } from '@/hooks/use-breadcrumbs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Role, type PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -15,14 +16,11 @@ interface UserDashboardProps extends PageProps {
     };
 }
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Mi Dashboard',
-        href: '/user/dashboard',
-    },
-];
-
 export default function UserDashboard({ userInfo }: UserDashboardProps) {
+
+    const { clientBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = clientBreadcrumbs.dashboard();
+
     const getGreeting = () => {
         const hour = new Date().getHours();
         if (hour < 12) return 'Buenos días';

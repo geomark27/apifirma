@@ -12,6 +12,7 @@ import {
     CheckCircle, XCircle, AlertCircle, Filter
 } from 'lucide-react';
 import { useState } from 'react';
+import { route } from 'ziggy-js'
 
 interface CertificationsIndexProps extends PageProps {
     certifications: PaginatedCertifications;
@@ -111,7 +112,7 @@ export default function CertificationsIndex({
                             Gestiona tus solicitudes de certificados digitales
                         </p>
                     </div>
-                    <Link href="/certifications/create">
+                    <Link href={route('user.certifications.create')}>
                         <Button className="flex items-center space-x-2">
                             <Plus className="h-4 w-4" />
                             <span>Nueva Certificación</span>

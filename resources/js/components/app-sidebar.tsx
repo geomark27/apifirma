@@ -47,6 +47,14 @@ export function AppSidebar() {
         },
     ];
 
+    const clientNavItems: NavItem[] = [
+        {
+            title: 'Gestionar certificados',
+            href: '/user/certifications',
+            icon: Shield,
+        },
+    ];
+
     // Determinar elementos de navegación según permisos
     const getNavItems = (): NavItem[] => {
         let navItems = [...baseNavItems];
@@ -54,6 +62,8 @@ export function AppSidebar() {
         // Si es admin, agregar elementos de administración
         if (user?.roles?.some((role: any) => role.name === 'admin')) {
             navItems.push(...adminNavItems);
+        }else{
+            navItems.push(...clientNavItems);
         }
 
         return navItems;

@@ -65,9 +65,28 @@ export const useBreadcrumbs = () => {
         },
     };
 
+    const clientBreadcrumbs = {
+        dashboard: () => userBase,
+
+        certifications: {
+            index: () => createUserBreadcrumbs([
+                { title: 'Certificaciones', href: '/user/certifications' }
+            ]),
+            create: () => createUserBreadcrumbs([
+                { title: 'Certificaciones', href: '/user/certifications' },
+                { title: 'Crear Certificación', href: '/user/certifications/create' }
+            ]),
+            edit: () => createUserBreadcrumbs([
+                { title: 'Certificaciones', href: '/user/certifications' },
+                { title: 'Editar Certificación', href: '#' }
+            ]),
+        },
+    };
+
     return {
         createAdminBreadcrumbs,
         createUserBreadcrumbs,
+        clientBreadcrumbs,
         adminBreadcrumbs,
         adminBase,
         userBase,

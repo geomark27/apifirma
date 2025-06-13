@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\RoleController;  // ← Agregar esta línea
 use App\Http\Controllers\User\DashboardController as UserDashboardController;
+use App\Http\Controllers\User\CertificationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -55,7 +56,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Rutas para USER
     Route::middleware(['role:user'])->prefix('user')->name('user.')->group(function () {
         Route::get('/dashboard', [UserDashboardController::class, 'index'])->name('dashboard');
+
+        // Certificaciones
+        Route::get('certifications', [CertificationController::class, 'index'])->name('certifications.index');
+        Route::get('certifications/create', [CertificationController::class, 'create'])->name('certifications.create');
+        Route::post('certifications', [CertificationController::class, 'store'])->name('certifications.store');
+        Route::get('certifications/{certification}', [CertificationController::class, 'show'])->name('certifications.show');
+        Route::get('certifications/{certification}/edit', [CertificationController::class, 'edit'])->name('certifications.edit');
+        Route::put('certifications/{certification}', [CertificationController::class, 'update'])->name('certifications.update');
+        Route::post('certifications/{certification}/submit', [CertificationController::class, 'submit'])->name('certifications.submit');
+        Route::delete('certifications/{certification}', [CertificationController::class, 'destroy'])->name('certifications.destroy');
     });
+
+
 });
 
 require __DIR__.'/settings.php';

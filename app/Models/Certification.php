@@ -19,6 +19,8 @@ class Certification extends Model
         'applicantName',
         'applicantLastName',
         'applicantSecondLastName',
+        'dateOfBirth',
+        'clientAge',
         'fingerCode',
         'emailAddress',
         'cellphoneNumber',
