@@ -8,8 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import AppLayout from "@/layouts/app-layout";
 import { Head, useForm } from "@inertiajs/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarIcon, Upload, User, Building, FileText, Shield, MapPin } from "lucide-react";
+import ErrorModal from "@/components/ErrorModal";
 
 interface CreateCertificationProps {
     applicationTypes: Record<string, string>;
@@ -125,7 +126,7 @@ export default function CreateCertification({
     });
 
     const isLegalRepresentative = data.applicationType === 'LEGAL_REPRESENTATIVE';
-    const requiresCompanyDocs = isLegalRepresentative || data.companyRuc;
+    const requiresCompanyDocs   = isLegalRepresentative || data.companyRuc;
 
     // Funciones para calcular edad
     const calculateAge = (birthDate: string): number => {
@@ -180,8 +181,11 @@ export default function CreateCertification({
         if (data.identificationNumber && data.identificationNumber.length !== 10) {
             newErrors.identificationNumber = 'La cédula debe tener 10 dígitos';
         }
-        if (data.fingerCode && !/^[A-Z]{2}\d{8}$/.test(data.fingerCode)) {
-            newErrors.fingerCode = 'Formato inválido. Ejemplo: AB12345678';
+        const FINGER_CODE_REGEX = /^[A-Z]\d{4}[A-Z]\d{4}$/;
+
+        // En tu función de validación:
+        if (data.fingerCode && !FINGER_CODE_REGEX.test(data.fingerCode)) {
+        newErrors.fingerCode = 'Formato inválido. Ejemplo: V1234V1234';
         }
         if (data.emailAddress && !/\S+@\S+\.\S+/.test(data.emailAddress)) {
             newErrors.emailAddress = 'Formato de correo inválido';
@@ -212,23 +216,32 @@ export default function CreateCertification({
     const validateStep2 = (): boolean => {
         const newErrors: Record<string, string> = {};
 
-        if (!data.province) newErrors.province = 'Seleccione la provincia';
-        if (!data.city) newErrors.city = 'Seleccione la ciudad';
-        if (!data.address) newErrors.address = 'Ingrese la dirección';
+        // Validaciones existentes
+        if (!data.province)             newErrors.province = 'Seleccione la provincia';
+        if (!data.city)                 newErrors.city = 'Seleccione la ciudad';
+        if (!data.address)              newErrors.address = 'Ingrese la dirección';
         if (!data.referenceTransaction) newErrors.referenceTransaction = 'Ingrese la referencia de transacción';
-        if (!data.period) newErrors.period = 'Seleccione el período';
+        if (!data.period)               newErrors.period = 'Seleccione el período';
 
-        // Validaciones para representante legal
-        if (isLegalRepresentative) {
-            if (!data.companyRuc) newErrors.companyRuc = 'Ingrese el RUC de la empresa';
-            if (!data.companySocialReason) newErrors.companySocialReason = 'Ingrese la razón social';
-            if (!data.positionCompany) newErrors.positionCompany = 'Ingrese el cargo en la empresa';
-            if (!data.appointmentExpirationDate) newErrors.appointmentExpirationDate = 'Ingrese la fecha de expiración del nombramiento';
+        // ¿Persona natural “con RUC”?
+        const isNaturalWithRuc =
+            data.personType === 'NATURAL_PERSON' &&
+            data.identificationNumber?.length === 13;
+
+        // Si es NATURAL_PERSON y el identificationNumber tiene 13 dígitos, obligamos companyRuc
+        if (isNaturalWithRuc && !data.companyRuc) {
+            newErrors.companyRuc = 'Debes ingresar el RUC de la empresa';
+        }
+        // Y validamos su longitud si ya lo ingresó
+        if (isNaturalWithRuc && data.companyRuc?.length !== 13) {
+            newErrors.companyRuc = 'El RUC debe tener 13 dígitos';
         }
 
-        // Validación de RUC si se proporciona
-        if (data.companyRuc && data.companyRuc.length !== 13) {
-            newErrors.companyRuc = 'El RUC debe tener 13 dígitos';
+        // Resto de validaciones (representante legal, etc.)
+        if (isLegalRepresentative) {
+            if (!data.companySocialReason)       newErrors.companySocialReason = 'Ingrese la razón social';
+            if (!data.positionCompany)           newErrors.positionCompany   = 'Ingrese el cargo en la empresa';
+            if (!data.appointmentExpirationDate) newErrors.appointmentExpirationDate = 'Ingrese la fecha de expiración del nombramiento';
         }
 
         setStepErrors(newErrors);
@@ -243,6 +256,13 @@ export default function CreateCertification({
         if (!data.identificationBack) newErrors.identificationBack = 'Suba la foto posterior de la cédula';
         if (!data.identificationSelfie) newErrors.identificationSelfie = 'Suba la selfie con la cédula';
 
+        // Reutilizamos la misma bandera
+        const isNaturalWithRuc = data.personType === 'NATURAL_PERSON' && data.identificationNumber?.length === 13;
+        
+        // Caso especial: si es NATURAL con RUC → forzamos el PDF
+        if (isNaturalWithRuc && !data.pdfCompanyRuc) {
+            newErrors.pdfCompanyRuc = 'Suba el PDF del RUC de la empresa';
+        }      
         // Documentos empresariales si se requieren
         if (requiresCompanyDocs) {
             if (!data.pdfCompanyRuc) newErrors.pdfCompanyRuc = 'Suba el PDF del RUC de la empresa';
@@ -281,7 +301,7 @@ export default function CreateCertification({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post(route('certifications.store'));
+        post(route('user.certifications.store'));
     };
 
     const nextStep = () => {
@@ -456,10 +476,10 @@ export default function CreateCertification({
                             type="text"
                             value={data.fingerCode}
                             onChange={(e) => setData('fingerCode', e.target.value)}
-                            placeholder="AB12345678"
+                            placeholder="V1234V1234"
                             maxLength={10}
                         />
-                        <p className="text-xs text-gray-500">Formato: AB12345678</p>
+                        <p className="text-xs text-gray-500">Formato: V1234V1234</p>
                         {(errors.fingerCode || stepErrors.fingerCode) && <p className="text-sm text-red-500">{errors.fingerCode || stepErrors.fingerCode}</p>}
                     </div>
 
@@ -1002,6 +1022,9 @@ export default function CreateCertification({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Nueva Solicitud de Certificado" />
+
+            {/* --- modal que reaccionará a props.errors --- */}
+            <ErrorModal />
 
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6">
                 <div className="flex items-center justify-between">

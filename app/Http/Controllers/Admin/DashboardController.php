@@ -116,7 +116,7 @@ class DashboardController extends Controller
             'weekly_growth' => $weeklyGrowthPercentage
         ];
 
-        return Inertia::render('admin/Dashboard', [
+        return Inertia::render('admin/dashboard', [
             'stats' => [
                 'total_users' => $totalUsers,
                 'total_roles' => $totalRoles,

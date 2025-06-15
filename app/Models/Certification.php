@@ -7,14 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
 use Carbon\Carbon;
+use App\Models\User;
 
 class Certification extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'certification_number',
         'user_id',
-        // Información personal
         'identificationNumber',
         'applicantName',
         'applicantLastName',
@@ -24,23 +25,18 @@ class Certification extends Model
         'fingerCode',
         'emailAddress',
         'cellphoneNumber',
-        // Ubicación
         'city',
         'province',
         'address',
         'countryCode',
-        // Información empresarial
         'companyRuc',
         'positionCompany',
         'companySocialReason',
         'appointmentExpirationDate',
-        // Tipo de documento y aplicación
         'documentType',
         'applicationType',
-        // Transacción
         'referenceTransaction',
         'period',
-        // Archivos
         'identificationFront',
         'identificationBack',
         'identificationSelfie',
@@ -49,13 +45,12 @@ class Certification extends Model
         'pdfAppointmentAcceptance',
         'pdfCompanyConstitution',
         'authorizationVideo',
-        // Estado
         'status',
+        'validationStatus',       // Nuevo campo para el estado de solicitud
         'rejection_reason',
         'processed_by',
         'processed_at',
         'submitted_at',
-        // Metadatos
         'metadata',
         'terms_accepted',
         'ip_address',
@@ -64,36 +59,65 @@ class Certification extends Model
 
     protected $casts = [
         'appointmentExpirationDate' => 'datetime',
-        'processed_at' => 'datetime',
-        'submitted_at' => 'datetime',
-        'metadata' => 'array',
-        'terms_accepted' => 'boolean',
+        'processed_at'              => 'datetime',
+        'submitted_at'              => 'datetime',
+        'metadata'                  => 'array',
+        'terms_accepted'            => 'boolean',
+        'dateOfBirth'               => 'date',
     ];
 
-    // Constantes para valores permitidos
+    // -------------------------------------------------
+    // Constantes de validación
+    // -------------------------------------------------
+
+    /** Tipos de documento permitidos */
     const DOCUMENT_TYPES = ['CI'];
-    
+
+    /** Tipos de aplicación */
     const APPLICATION_TYPES = [
-        'NATURAL_PERSON' => 'Persona Natural',
+        'NATURAL_PERSON'       => 'Persona Natural',
         'LEGAL_REPRESENTATIVE' => 'Representante Legal',
     ];
-
-    const PERIODS = [
-        '1_YEAR' => '1 Año',
-        '2_YEARS' => '2 Años',
-        '3_YEARS' => '3 Años',
+    
+    /** Prefijos para el número de certificado */
+    private const PREFIXES = [
+        'NATURAL_PERSON'       => 'CPN',
+        'LEGAL_REPRESENTATIVE' => 'CRL',
     ];
 
+    /** Periodos permitidos (Tabla 2) */
+    const PERIODS = [
+        'ONE_WEEK'    => '1 SEMANA',
+        'ONE_MONTH'   => '1 MES',
+        'ONE_YEAR'    => '1 AÑO',
+        'TWO_YEARS'   => '2 AÑOS',
+        'THREE_YEARS' => '3 AÑOS',
+        'FOUR_YEARS'  => '4 AÑOS',
+        'FIVE_YEARS'  => '5 AÑOS',
+    ];
+
+    /** Estados internos de workflow (legacy) */
     const STATUS_OPTIONS = [
-        'draft' => 'Borrador',
-        'pending' => 'Pendiente',
+        'draft'     => 'Borrador',
+        'pending'   => 'Pendiente',
         'in_review' => 'En Revisión',
-        'approved' => 'Aprobado',
-        'rejected' => 'Rechazado',
+        'approved'  => 'Aprobado',
+        'rejected'  => 'Rechazado',
         'completed' => 'Completado',
     ];
 
-    // Ciudades y provincias de Ecuador (ejemplo - puedes expandir)
+    /** Estados de validación (Tabla 4) */
+    const VALIDATION_STATUSES = [
+        'REGISTERED' => 'La solicitud fue correctamente registrada.',
+        'VALIDATING' => 'La solicitud se encuentra en validación por parte de los operadores.',
+        'REFUSED'    => 'La solicitud fue rechazada por parte de los operadores.',
+        'ERROR'      => 'La solicitud contiene errores. Los operadores tratarán de corregir información.',
+        'APPROVED'   => 'La solicitud fue aprobada y el email de descarga fue enviado.',
+        'GENERATED'  => 'El certificado ya fue descargado por el cliente.',
+        'EXPIRED'    => 'La solicitud caducó tras 50 días sin descarga.',
+    ];
+
+	// Ciudades y provincias de Ecuador (ejemplo - puedes expandir)
     const CITIES = [
         'Quito', 'Guayaquil', 'Cuenca', 'Santo Domingo', 'Machala',
         'Durán', 'Manta', 'Portoviejo', 'Loja', 'Ambato', 'Esmeraldas',
@@ -109,202 +133,238 @@ class Certification extends Model
         'Sucumbíos', 'Tungurahua', 'Zamora Chinchipe'
     ];
 
-    /**
-     * Relación con usuario propietario
-     */
+    // -------------------------------------------------
+    // Relaciones
+    // -------------------------------------------------
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Relación con usuario que procesó la solicitud
-     */
     public function processedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'processed_by');
     }
 
-    /**
-     * Scope para filtrar por estado
-     */
+    // -------------------------------------------------
+    // Scopes
+    // -------------------------------------------------
+
     public function scopeByStatus(Builder $query, string $status): Builder
     {
         return $query->where('status', $status);
     }
 
-    /**
-     * Scope para filtrar por tipo de aplicación
-     */
     public function scopeByApplicationType(Builder $query, string $type): Builder
     {
         return $query->where('applicationType', $type);
     }
 
-    /**
-     * Scope para solicitudes pendientes
-     */
     public function scopePending(Builder $query): Builder
     {
         return $query->whereIn('status', ['pending', 'in_review']);
     }
 
-    /**
-     * Scope para solicitudes completadas
-     */
     public function scopeCompleted(Builder $query): Builder
     {
         return $query->whereIn('status', ['approved', 'completed']);
     }
 
-    /**
-     * Verificar si requiere documentos de empresa
-     */
-    public function requiresCompanyDocuments(): bool
+    public function scopeByPeriod(Builder $query, string $period): Builder
     {
-        return $this->applicationType === 'LEGAL_REPRESENTATIVE' || 
-               ($this->applicationType === 'NATURAL_PERSON' && !empty($this->companyRuc));
+        return $query->where('period', $period);
     }
 
-    /**
-     * Verificar si requiere documentos de nombramiento
-     */
+    public function scopeByValidationStatus(Builder $query, string $status): Builder
+    {
+        return $query->where('validationStatus', $status);
+    }
+
+    // -------------------------------------------------
+    // Generación de número de certificado
+    // -------------------------------------------------
+
+    public static function generateCertificationNumber(string $identificationNumber, string $applicationType): string
+    {
+        if (! array_key_exists($applicationType, self::APPLICATION_TYPES)) {
+            throw new \InvalidArgumentException('Tipo de aplicación no válido.');
+        }
+
+        $timestamp = Carbon::now()->format('YmdHis');
+        $prefix    = self::PREFIXES[$applicationType] ?? 'CERT';
+
+        // Ejemplo: "CPN0953331675-20250614153045"
+        return sprintf('%s%s-%s', $prefix, $identificationNumber, $timestamp);
+    }
+
+    // -------------------------------------------------
+    // Lógica de documentos requeridos
+    // -------------------------------------------------
+
+    public function requiresCompanyDocuments(): bool
+    {
+        return $this->applicationType === 'LEGAL_REPRESENTATIVE'
+            || (
+                $this->applicationType === 'NATURAL_PERSON'
+                && ! empty($this->companyRuc)
+            );
+    }
+
     public function requiresAppointmentDocuments(): bool
     {
         return $this->applicationType === 'LEGAL_REPRESENTATIVE';
     }
 
-    /**
-     * Obtener progreso de completitud (porcentaje)
-     */
+    // -------------------------------------------------
+    // Completitud
+    // -------------------------------------------------
+
     public function getCompletionPercentage(): int
     {
-        $requiredFields = [
-            'identificationNumber', 'applicantName', 'applicantLastName',
-            'fingerCode', 'emailAddress', 'cellphoneNumber', 'city',
-            'province', 'address', 'referenceTransaction', 'period',
-            'identificationFront', 'identificationBack', 'identificationSelfie'
+        $required = [
+            'identificationNumber','applicantName','applicantLastName',
+            'fingerCode','emailAddress','cellphoneNumber','city','province',
+            'address','referenceTransaction','period',
+            'identificationFront','identificationBack','identificationSelfie'
         ];
 
-        // Agregar campos condicionales
         if ($this->requiresCompanyDocuments()) {
-            $requiredFields[] = 'companyRuc';
-            $requiredFields[] = 'pdfCompanyRuc';
+            $required[] = 'companyRuc';
+            $required[] = 'pdfCompanyRuc';
         }
 
         if ($this->requiresAppointmentDocuments()) {
-            $requiredFields = array_merge($requiredFields, [
-                'positionCompany', 'companySocialReason', 
-                'appointmentExpirationDate', 'pdfRepresentativeAppointment',
-                'pdfAppointmentAcceptance', 'pdfCompanyConstitution'
+            $required = array_merge($required, [
+                'positionCompany','companySocialReason',
+                'appointmentExpirationDate','pdfRepresentativeAppointment',
+                'pdfAppointmentAcceptance','pdfCompanyConstitution'
             ]);
         }
 
-        $completed = 0;
-        foreach ($requiredFields as $field) {
-            if (!empty($this->$field)) {
-                $completed++;
+        $filled = 0;
+        foreach ($required as $f) {
+            if (! empty($this->{$f})) {
+                $filled++;
             }
         }
 
-        return round(($completed / count($requiredFields)) * 100);
+        return (int) round(($filled / count($required)) * 100);
     }
 
-    /**
-     * Validar formato de código dactilar
-     */
+    // -------------------------------------------------
+    // Validaciones de formato
+    // -------------------------------------------------
+
     public function validateFingerCode(): bool
     {
-        return preg_match('/^[A-Z]{2}\d{8}$/', $this->fingerCode);
+        return preg_match('/^[A-Z]{2}\d{8}$/', $this->fingerCode) === 1;
     }
 
-    /**
-     * Validar formato de teléfono
-     */
     public function validateCellphone(): bool
     {
-        return preg_match('/^\+5939\d{8}$/', $this->cellphoneNumber);
+        return preg_match('/^\+5939\d{8}$/', $this->cellphoneNumber) === 1;
     }
 
-    /**
-     * Obtener el estado en español
-     */
+    // -------------------------------------------------
+    // Etiquetas legibles
+    // -------------------------------------------------
+
     public function getStatusLabel(): string
     {
         return self::STATUS_OPTIONS[$this->status] ?? $this->status;
     }
 
-    /**
-     * Obtener el tipo de aplicación en español
-     */
     public function getApplicationTypeLabel(): string
     {
         return self::APPLICATION_TYPES[$this->applicationType] ?? $this->applicationType;
     }
 
-    /**
-     * Obtener el período en español
-     */
     public function getPeriodLabel(): string
     {
         return self::PERIODS[$this->period] ?? $this->period;
     }
 
-    /**
-     * Verificar si puede ser editada
-     */
+    public function getValidationStatusLabel(): string
+    {
+        return self::VALIDATION_STATUSES[$this->validationStatus] 
+             ?? $this->validationStatus;
+    }
+
+    // -------------------------------------------------
+    // Acciones de workflow
+    // -------------------------------------------------
+
     public function canBeEdited(): bool
     {
         return in_array($this->status, ['draft', 'rejected']);
     }
 
-    /**
-     * Verificar si puede ser enviada
-     */
     public function canBeSubmitted(): bool
     {
-        return $this->status === 'draft' && 
-               $this->getCompletionPercentage() === 100 && 
-               $this->terms_accepted;
+        return $this->status === 'draft'
+            && $this->getCompletionPercentage() === 100
+            && $this->terms_accepted;
     }
 
-    /**
-     * Marcar como enviada
-     */
     public function markAsSubmitted(): void
     {
         $this->update([
-            'status' => 'pending',
+            'status'       => 'pending',
             'submitted_at' => now(),
         ]);
     }
 
-    /**
-     * Aprobar solicitud
-     */
     public function approve(User $processedBy, string $notes = null): void
     {
         $this->update([
-            'status' => 'approved',
-            'processed_by' => $processedBy->id,
-            'processed_at' => now(),
-            'metadata' => array_merge($this->metadata ?? [], [
+            'validationStatus' => 'APPROVED',
+            'processed_by'     => $processedBy->id,
+            'processed_at'     => now(),
+            'metadata'         => array_merge($this->metadata ?? [], [
                 'approval_notes' => $notes,
-                'approved_at' => now()->toISOString(),
+                'approved_at'    => now()->toISOString(),
             ]),
         ]);
     }
 
-    /**
-     * Rechazar solicitud
-     */
     public function reject(User $processedBy, string $reason): void
     {
         $this->update([
-            'status' => 'rejected',
+            'validationStatus' => 'REFUSED',
             'rejection_reason' => $reason,
-            'processed_by' => $processedBy->id,
-            'processed_at' => now(),
+            'processed_by'     => $processedBy->id,
+            'processed_at'     => now(),
         ]);
+    }
+
+    // -------------------------------------------------
+    // Validación de edad mínima
+    // -------------------------------------------------
+
+    public static function verificateAge(string $dateOfBirth): ?string
+    {
+        $dob = Carbon::parse($dateOfBirth);
+        $age = $dob->diffInYears(Carbon::now());
+
+        if ($age < 18) {
+            throw new \InvalidArgumentException('La edad mínima para la certificación es de 18 años.');
+        }
+
+        return $dob->format('Y-m-d');
+    }
+
+    // -------------------------------------------------
+    // Cálculo de edad
+    // -------------------------------------------------
+    /**
+     * Calcula la edad a partir de la fecha de nacimiento.
+     *
+     * @param string $dateOfBirth Fecha de nacimiento en formato 'Y-m-d'.
+     * @return int Edad en años.
+     */
+    public static function calculateAge(string $dateOfBirth): int
+    {
+        return Carbon::parse($dateOfBirth)->diffInYears(Carbon::now());
     }
 }
