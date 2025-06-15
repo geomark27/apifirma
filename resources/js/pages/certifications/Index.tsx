@@ -32,10 +32,8 @@ export default function CertificationsIndex({
     applicationTypes,
     flash 
 }: CertificationsIndexProps) {
-    const { createUserBreadcrumbs } = useBreadcrumbs();
-    const breadcrumbs = createUserBreadcrumbs([
-        { title: 'Mis Certificaciones', href: '/certifications' }
-    ]);
+    const { userBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = userBreadcrumbs.certifications.index();
 
     const [search, setSearch] = useState(filters.search || '');
     const [selectedStatus, setSelectedStatus] = useState(filters.status || '');
@@ -43,7 +41,7 @@ export default function CertificationsIndex({
 
     // Función para aplicar filtros
     const handleFilter = () => {
-        router.get('/certifications', {
+        router.get(route('user.certifications.index'), {
             search: search || undefined,
             status: selectedStatus || undefined,
             type: selectedType || undefined,
@@ -58,7 +56,7 @@ export default function CertificationsIndex({
         setSearch('');
         setSelectedStatus('');
         setSelectedType('');
-        router.get('/certifications', {}, {
+        router.get(route('user.certifications.index'), {}, {
             preserveState: true,
             replace: true,
         });
@@ -67,7 +65,7 @@ export default function CertificationsIndex({
     // Función para eliminar certificación
     const deleteCertification = (certification: Certification) => {
         if (confirm(`¿Estás seguro de que quieres eliminar esta certificación?`)) {
-            router.delete(`/certifications/${certification.id}`, {
+            router.delete(route('user.certifications.destroy', certification.id), {
                 preserveScroll: true,
             });
         }
@@ -251,7 +249,7 @@ export default function CertificationsIndex({
                                         </div>
                                         
                                         <div className="flex items-center space-x-2 ml-4">
-                                            <Link href={`/certifications/${certification.id}`}>
+                                            <Link href={route('user.certifications.show', certification.id)}>
                                                 <Button variant="outline" size="sm">
                                                     <Eye className="h-4 w-4" />
                                                 </Button>
@@ -259,7 +257,7 @@ export default function CertificationsIndex({
                                             
                                             {certification.status === 'draft' && (
                                                 <>
-                                                    <Link href={`/certifications/${certification.id}/edit`}>
+                                                    <Link href={route('user.certifications.edit', certification.id)}>
                                                         <Button variant="outline" size="sm">
                                                             <Edit className="h-4 w-4" />
                                                         </Button>

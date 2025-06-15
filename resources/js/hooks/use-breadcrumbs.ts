@@ -28,7 +28,7 @@ export const useBreadcrumbs = () => {
         return [...userBase, ...additionalItems];
     };
 
-    // Breadcrumbs específicos más comunes
+    // Breadcrumbs específicos más comunes para ADMIN
     const adminBreadcrumbs = {
         dashboard: () => adminBase,
         
@@ -65,28 +65,38 @@ export const useBreadcrumbs = () => {
         },
     };
 
-    const clientBreadcrumbs = {
+    // Breadcrumbs específicos para USER
+    const userBreadcrumbs = {
         dashboard: () => userBase,
 
         certifications: {
             index: () => createUserBreadcrumbs([
-                { title: 'Certificaciones', href: '/user/certifications' }
+                { title: 'Mis Certificaciones', href: '/user/certifications' }
             ]),
             create: () => createUserBreadcrumbs([
-                { title: 'Certificaciones', href: '/user/certifications' },
-                { title: 'Crear Certificación', href: '/user/certifications/create' }
+                { title: 'Mis Certificaciones', href: '/user/certifications' },
+                { title: 'Nueva Certificación', href: '/user/certifications/create' }
             ]),
-            edit: () => createUserBreadcrumbs([
-                { title: 'Certificaciones', href: '/user/certifications' },
-                { title: 'Editar Certificación', href: '#' }
+            show: (id?: number | string) => createUserBreadcrumbs([
+                { title: 'Mis Certificaciones', href: '/user/certifications' },
+                { title: `Certificación ${id ? `#${id}` : ''}`, href: '#' }
+            ]),
+            edit: (id?: number | string) => createUserBreadcrumbs([
+                { title: 'Mis Certificaciones', href: '/user/certifications' },
+                { title: `Certificación ${id ? `#${id}` : ''}`, href: id ? `/user/certifications/${id}` : '#' },
+                { title: 'Editar', href: '#' }
             ]),
         },
     };
+
+    // Mantener clientBreadcrumbs para compatibilidad hacia atrás
+    const clientBreadcrumbs = userBreadcrumbs;
 
     return {
         createAdminBreadcrumbs,
         createUserBreadcrumbs,
         clientBreadcrumbs,
+        userBreadcrumbs,
         adminBreadcrumbs,
         adminBase,
         userBase,

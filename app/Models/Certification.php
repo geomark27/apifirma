@@ -187,15 +187,18 @@ class Certification extends Model
 
     public static function generateCertificationNumber(string $identificationNumber, string $applicationType): string
     {
-        if (! array_key_exists($applicationType, self::APPLICATION_TYPES)) {
+        if (!array_key_exists($applicationType, self::APPLICATION_TYPES)) {
             throw new \InvalidArgumentException('Tipo de aplicación no válido.');
         }
 
-        $timestamp = Carbon::now()->format('YmdHis');
-        $prefix    = self::PREFIXES[$applicationType] ?? 'CERT';
-
-        // Ejemplo: "CPN0953331675-20250614153045"
-        return sprintf('%s%s-%s', $prefix, $identificationNumber, $timestamp);
+        $prefix = self::PREFIXES[$applicationType] ?? 'CERT';
+        
+        // Contar certificaciones existentes del mismo tipo
+        $count = self::where('applicationType', $applicationType)->count();
+        $nextNumber = $count + 1;
+        
+        // Formato: CPN-000001, CRL-000001
+        return sprintf('%s-%06d', $prefix, $nextNumber);
     }
 
     // -------------------------------------------------
@@ -315,7 +318,7 @@ class Certification extends Model
         ]);
     }
 
-    public function approve(User $processedBy, string $notes = null): void
+    public function approve(User $processedBy, string $notes = ''): void
     {
         $this->update([
             'validationStatus' => 'APPROVED',

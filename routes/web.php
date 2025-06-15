@@ -66,6 +66,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('certifications/{certification}', [CertificationController::class, 'update'])->name('certifications.update');
         Route::post('certifications/{certification}/submit', [CertificationController::class, 'submit'])->name('certifications.submit');
         Route::delete('certifications/{certification}', [CertificationController::class, 'destroy'])->name('certifications.destroy');
+        
+        // Descarga segura de archivos
+        Route::get('download', [CertificationController::class, 'downloadFile'])->name('download');
     });
 
 

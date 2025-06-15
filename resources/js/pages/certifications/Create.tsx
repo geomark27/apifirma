@@ -73,8 +73,8 @@ export default function CreateCertification({
     cities, 
     provinces 
 }: CreateCertificationProps) {
-    const { clientBreadcrumbs } = useBreadcrumbs();
-    const breadcrumbs = clientBreadcrumbs.certifications.create();
+    const { userBreadcrumbs } = useBreadcrumbs();
+    const breadcrumbs = userBreadcrumbs.certifications.create();
     
     const [currentStep, setCurrentStep] = useState(1);
     const [stepErrors, setStepErrors] = useState<Record<string, string>>({});

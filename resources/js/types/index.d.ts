@@ -1,3 +1,6 @@
+/// <reference types="react" />
+/// <reference types="react-dom" />
+
 import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
@@ -75,8 +78,8 @@ export interface PaginatedUsers {
     total: number;
     from: number;
     to: number;
-    prev_page_url?: string;  // ← Agregar
-    next_page_url?: string;  // ← Agregar
+    prev_page_url?: string;
+    next_page_url?: string;
 }
 
 // Usuario autenticado con métodos de roles
@@ -102,7 +105,9 @@ export interface PageProps {
 // Interfaces para Certificaciones
 export interface Certification {
     id: number;
+    certification_number?: string;
     user_id: number;
+    
     // Información personal
     identificationNumber: string;
     applicantName: string;
@@ -111,21 +116,27 @@ export interface Certification {
     fingerCode: string;
     emailAddress: string;
     cellphoneNumber: string;
+    dateOfBirth?: string;
+    clientAge?: number;
+    
     // Ubicación
     city: string;
     province: string;
     address: string;
     countryCode: string;
+    
     // Información empresarial
     companyRuc?: string;
     positionCompany?: string;
     companySocialReason?: string;
     appointmentExpirationDate?: string;
+    
     // Tipo y transacción
     documentType: string;
     applicationType: 'NATURAL_PERSON' | 'LEGAL_REPRESENTATIVE';
     referenceTransaction: string;
-    period: '1_YEAR' | '2_YEARS' | '3_YEARS';
+    period: 'ONE_WEEK' | 'ONE_MONTH' | 'ONE_YEAR' | 'TWO_YEARS' | 'THREE_YEARS' | 'FOUR_YEARS' | 'FIVE_YEARS';
+    
     // Archivos
     identificationFront?: string;
     identificationBack?: string;
@@ -135,12 +146,15 @@ export interface Certification {
     pdfAppointmentAcceptance?: string;
     pdfCompanyConstitution?: string;
     authorizationVideo?: string;
-    // Estado
+    
+    // Estados
     status: 'draft' | 'pending' | 'in_review' | 'approved' | 'rejected' | 'completed';
+    validationStatus: 'REGISTERED' | 'VALIDATING' | 'REFUSED' | 'ERROR' | 'APPROVED' | 'GENERATED' | 'EXPIRED';
     rejection_reason?: string;
     processed_by?: number;
     processed_at?: string;
     submitted_at?: string;
+    
     // Metadatos
     metadata?: any;
     terms_accepted: boolean;
@@ -148,6 +162,7 @@ export interface Certification {
     user_agent?: string;
     created_at: string;
     updated_at: string;
+    
     // Relaciones
     user?: User;
     processedBy?: User;

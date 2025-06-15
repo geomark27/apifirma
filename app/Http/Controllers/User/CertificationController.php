@@ -129,19 +129,34 @@ class CertificationController extends Controller
      */
     public function show(Certification $certification)
     {
-        // Solo propietario o admin
-        if ($certification->user_id !== Auth::id() && ! Auth::user()->hasRole('admin')) {
-            abort(403);
-        }
+        // Permitir si: (dueño + rol user) o rol admin
+        $this->validateRole($certification);
 
         $certification->load(['user', 'processedBy']);
 
+        // Calcular edad en tiempo real si es necesario
+        $currentAge = $certification->dateOfBirth ? 
+            \Carbon\Carbon::parse($certification->dateOfBirth)->age : null;
+
         return Inertia::render('certifications/Show', [
-            'certification'           => $certification,
-            'statusOptions'           => Certification::STATUS_OPTIONS,
+            'certification' => [
+                ...$certification->toArray(),
+                'current_age' => $currentAge,
+                'is_over_65' => $currentAge && $currentAge >= 65,
+                'formatted_created_at' => $certification->created_at->format('d/m/Y H:i'),
+                'formatted_updated_at' => $certification->updated_at->format('d/m/Y H:i'),
+                'formatted_appointment_expiration' => $certification->appointmentExpirationDate ? 
+                    \Carbon\Carbon::parse($certification->appointmentExpirationDate)->format('d/m/Y') : null,
+            ],
+            'statusOptions' => Certification::STATUS_OPTIONS,
             'validationStatusOptions' => Certification::VALIDATION_STATUSES,
-            'canEdit'                 => $this->canEditByValidationStatus($certification),
-            'canDelete'               => $certification->validationStatus === 'REGISTERED',
+            'applicationTypes' => Certification::APPLICATION_TYPES,
+            'periods' => Certification::PERIODS,
+            'canEdit' => $this->canEditByValidationStatus($certification),
+            'canDelete' => $certification->validationStatus === 'REGISTERED',
+            'canSubmit' => $certification->status === 'draft' && $this->isCompleteCertification($certification),
+            'hasCompanyDocs' => $certification->applicationType === 'LEGAL_REPRESENTATIVE' || 
+                            ($certification->applicationType === 'NATURAL_PERSON' && !empty($certification->companyRuc)),
         ]);
     }
 
@@ -150,42 +165,54 @@ class CertificationController extends Controller
      */
     public function edit(Certification $certification)
     {
-        if ($certification->user_id !== Auth::id()) {
-            abort(403);
-        }
-        if (! $certification->canBeEdited()) {
+        // Permitir si: (dueño + rol user) o rol admin
+        $this->validateRole($certification);
+        
+        // Verificar si se puede editar basado en validationStatus
+        if (!in_array($certification->validationStatus, ['REGISTERED', 'REFUSED', 'ERROR'])) {
             return redirect()
                 ->route('user.certifications.show', $certification)
-                ->with('error', 'No puedes editar esta certificación ahora.');
+                ->with('error', "No puedes editar una certificación con estado '{$certification->validationStatus}'.");
         }
 
+        // Calcular edad actual
+        $currentAge = $certification->dateOfBirth ? 
+            \Carbon\Carbon::parse($certification->dateOfBirth)->age : null;
+
         return Inertia::render('certifications/Edit', [
-            'certification'    => $certification,
+            'certification' => [
+                ...$certification->toArray(),
+                'current_age' => $currentAge,
+                'is_over_65' => $currentAge && $currentAge >= 65,
+            ],
             'applicationTypes' => Certification::APPLICATION_TYPES,
-            'periods'          => Certification::PERIODS,
-            'cities'           => Certification::CITIES,
-            'provinces'        => Certification::PROVINCES,
+            'periods' => Certification::PERIODS,
+            'cities' => Certification::CITIES,
+            'provinces' => Certification::PROVINCES,
+            'statusOptions' => Certification::STATUS_OPTIONS,
+            'validationStatusOptions' => Certification::VALIDATION_STATUSES,
+            'canEdit' => true, // Si llegó hasta aquí es porque puede editar
+            'hasCompanyDocs' => $certification->applicationType === 'LEGAL_REPRESENTATIVE' || 
+                            ($certification->applicationType === 'NATURAL_PERSON' && !empty($certification->companyRuc)),
         ]);
     }
 
     /**
      * Actualizar certificación
      */
-
     public function update(Request $request, Certification $certification): RedirectResponse
     {
         // Solo propietario
-        if ($certification->user_id !== Auth::id()) {
-            abort(403);
-        }
+        $this->validateRole($certification);
 
         // Sólo se permite editar si está en REGISTERED, REFUSED o ERROR
-        if (! in_array($certification->validationStatus, ['REGISTERED','REFUSED','ERROR'])) {
+        if (!in_array($certification->validationStatus, ['REGISTERED','REFUSED','ERROR'])) {
             return redirect()->back()
-                             ->with('error', "No se puede editar una solicitud con estado '{$certification->validationStatus}'.");
+                            ->with('error', "No se puede editar una solicitud con estado '{$certification->validationStatus}'.");
         }
 
-        $rules    = $this->getValidationRules($request->applicationType ?? $certification->applicationType);
+        // ✅ USAR REGLAS ESPECÍFICAS PARA UPDATE
+        $rules = $this->getValidationRulesForUpdate($request->applicationType ?? $certification->applicationType, $certification);
         $messages = $this->getValidationMessages();
         $request->validate($rules, $messages);
 
@@ -214,6 +241,7 @@ class CertificationController extends Controller
                 'terms_accepted'            => $request->boolean('terms_accepted'),
             ]);
 
+            // ✅ Solo subir archivos nuevos
             $this->handleFileUploads($request, $certification);
 
             DB::commit();
@@ -232,8 +260,8 @@ class CertificationController extends Controller
             ]);
 
             return redirect()->back()
-                             ->withInput()
-                             ->with('error', 'Error al actualizar la certificación.');
+                            ->withInput()
+                            ->with('error', 'Error al actualizar la certificación.');
         }
     }
 
@@ -242,10 +270,9 @@ class CertificationController extends Controller
      */
     public function submit(Certification $certification)
     {
-        if ($certification->user_id !== Auth::id()) {
-            abort(403);
-        }
-        if (! $certification->canBeSubmitted()) {
+        $this->validateRole($certification);
+
+        if (!$certification->canBeSubmitted()) {
             return redirect()
                 ->route('user.certifications.show', $certification)
                 ->with('error', 'La certificación no está completa.');
@@ -282,6 +309,53 @@ class CertificationController extends Controller
             ->with('success', 'Certificación eliminada exitosamente.');
     }
 
+    /**
+     * Ruta para descarga segura de archivos
+     */
+    public function downloadFile(Request $request)
+    {
+        $path = $request->query('path');
+        
+        if (!$path || !Storage::disk('public')->exists($path)) {
+            abort(404, 'Archivo no encontrado.');
+        }
+
+        // Extraer número de identificación del path para verificar permisos
+        $pathParts = explode('/', $path);
+        if (count($pathParts) < 3 || $pathParts[0] !== 'certifications') {
+            abort(404, 'Ruta de archivo inválida.');
+        }
+
+        $identificationNumber = $pathParts[1];
+        
+        // Verificar que el usuario tiene permiso para acceder a este archivo
+        $certification = Certification::where('identificationNumber', $identificationNumber)->first();
+        
+        if (!$certification) {
+            abort(404, 'Certificación no encontrada.');
+        }
+
+        // Solo propietario o admin pueden descargar
+        if ($certification->user_id !== Auth::id() && !Auth::user()->hasRole('admin')) {
+            abort(403, 'No tienes permisos para acceder a este archivo.');
+        }
+
+        $fullPath = Storage::disk('public')->path($path);
+        $fileName = basename($path);
+        
+        return response()->download($fullPath, $fileName);
+    }
+
+
+    private function validateRole(Certification $certification): void
+    {
+        // Permitir si: (dueño + rol user) o rol admin
+        if (
+            !($certification->user_id === Auth::user()->id && Auth::user()->hasRole('user')) && !Auth::user()->hasRole('admin')
+        ) {
+            abort(403, 'No tienes autorización para ver esta certificación.');
+        }
+    }
     /**
      * Manejar subida de archivos
      */
@@ -404,10 +478,166 @@ class CertificationController extends Controller
     }
 
     /**
-     * Helper interno: define cuándo se puede editar según validationStatus
+     * Verificar si se puede editar basado en validationStatus
      */
-    protected function canEditByValidationStatus(Certification $cert): bool
+    private function canEditByValidationStatus(Certification $certification): bool
     {
-        return in_array($cert->validationStatus, ['REGISTERED','REFUSED','ERROR']);
+        return in_array($certification->validationStatus, ['REGISTERED', 'REFUSED', 'ERROR']);
+    }
+
+    /**
+     * Verificar si la certificación está completa para envío
+     */
+    private function isCompleteCertification(Certification $certification): bool
+    {
+
+        $requiredFields = [
+            'identificationNumber', 'applicantName', 'applicantLastName',
+            'fingerCode', 'emailAddress', 'cellphoneNumber', 'city', 
+            'province', 'address', 'applicationType', 'period', 'terms_accepted'
+        ];
+
+        foreach ($requiredFields as $field) {
+            if (empty($certification->$field)) {
+                return false;
+            }
+        }
+
+        // Archivos básicos requeridos
+        $requiredFiles = ['identificationFront', 'identificationBack', 'identificationSelfie'];
+        foreach ($requiredFiles as $file) {
+            if (empty($certification->$file)) {
+                return false;
+            }
+        }
+
+        // Si es representante legal, verificar archivos empresariales
+        if ($certification->applicationType === 'LEGAL_REPRESENTATIVE') {
+            $companyFiles = ['pdfCompanyRuc', 'pdfRepresentativeAppointment', 'pdfAppointmentAcceptance'];
+            foreach ($companyFiles as $file) {
+                if (empty($certification->$file)) {
+                    return false;
+                }
+            }
+        }
+
+        // Si es persona natural con RUC, verificar RUC
+        if ($certification->applicationType === 'NATURAL_PERSON' && !empty($certification->companyRuc)) {
+            if (empty($certification->pdfCompanyRuc)) {
+                return false;
+            }
+        }
+
+        // Si es mayor de 65 años, verificar video
+        if ($certification->clientAge && $certification->clientAge >= 65) {
+            if (empty($certification->authorizationVideo)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function updateInternalStatus(Certification $certification): void
+    {
+        // Si está completa y en borrador, cambiar a pending
+        if ($certification->status === 'draft' && $this->isCompleteCertification($certification)) {
+            $certification->update(['status' => 'pending']);
+        }
+        
+        // Si falta información y está en pending, regresar a draft
+        if ($certification->status === 'pending' && !$this->isCompleteCertification($certification)) {
+            $certification->update(['status' => 'draft']);
+        }
+    }
+
+    /**
+     * Reglas de validación específicas para UPDATE
+     */
+    private function getValidationRulesForUpdate(string $applicationType, Certification $certification): array
+    {
+        $baseRules = [
+            'identificationNumber'      => 'required|string|size:10',
+            'applicantName'             => 'required|string|max:100',
+            'applicantLastName'         => 'required|string|max:100',
+            'applicantSecondLastName'   => 'nullable|string|max:100',
+            'fingerCode'                => ['required','string','regex:/^[A-Z]\d{4}[A-Z]\d{4}$/'],
+            'emailAddress'              => 'required|email|max:100',
+            'cellphoneNumber'           => ['required','string','regex:/^\+5939\d{8}$/'],
+            'city'                      => 'required|string|in:'.implode(',', Certification::CITIES),
+            'province'                  => 'required|string|in:'.implode(',', Certification::PROVINCES),
+            'address'                   => 'required|string|min:15|max:100',
+            'applicationType'           => 'required|in:NATURAL_PERSON,LEGAL_REPRESENTATIVE',
+            'referenceTransaction'      => 'required|string|max:150',
+            'period'                    => 'required|in:ONE_WEEK,ONE_MONTH,ONE_YEAR,TWO_YEARS,THREE_YEARS,FOUR_YEARS,FIVE_YEARS',
+            'terms_accepted'            => 'required|accepted',
+            'dateOfBirth'               => 'required|date|before:today',
+            
+            // ✅ ARCHIVOS OPCIONALES EN UPDATE (solo si se suben nuevos)
+            'identificationFront'       => 'nullable|file|mimes:jpg,png|max:5120',
+            'identificationBack'        => 'nullable|file|mimes:jpg,png|max:5120',
+            'identificationSelfie'      => 'nullable|file|mimes:jpg,png|max:5120',
+        ];
+
+        // Verificar que archivos básicos existan (si no se están subiendo nuevos)
+        if (!request()->hasFile('identificationFront') && !$certification->identificationFront) {
+            $baseRules['identificationFront'] = 'required|file|mimes:jpg,png|max:5120';
+        }
+        if (!request()->hasFile('identificationBack') && !$certification->identificationBack) {
+            $baseRules['identificationBack'] = 'required|file|mimes:jpg,png|max:5120';
+        }
+        if (!request()->hasFile('identificationSelfie') && !$certification->identificationSelfie) {
+            $baseRules['identificationSelfie'] = 'required|file|mimes:jpg,png|max:5120';
+        }
+
+        // Si es Natural y proporciona RUC, exigir PDF solo si no existe
+        if ($applicationType === 'NATURAL_PERSON') {
+            $baseRules['companyRuc'] = 'nullable|string|size:13|required_with:pdfCompanyRuc';
+            if (request()->filled('companyRuc')) {
+                if (!request()->hasFile('pdfCompanyRuc') && !$certification->pdfCompanyRuc) {
+                    $baseRules['pdfCompanyRuc'] = 'required|file|mimes:pdf|max:10240';
+                } else {
+                    $baseRules['pdfCompanyRuc'] = 'nullable|file|mimes:pdf|max:10240';
+                }
+            }
+        }
+
+        // Reglas adicionales para representante legal
+        if ($applicationType === 'LEGAL_REPRESENTATIVE') {
+            $baseRules = array_merge($baseRules, [
+                'companyRuc'                => 'required|string|size:13',
+                'positionCompany'           => 'required|string|max:100',
+                'companySocialReason'       => 'required|string|max:250',
+                'appointmentExpirationDate' => 'required|date|after:today',
+            ]);
+
+            // PDFs empresariales - solo requeridos si no existen
+            $companyFiles = [
+                'pdfCompanyRuc' => $certification->pdfCompanyRuc,
+                'pdfRepresentativeAppointment' => $certification->pdfRepresentativeAppointment,
+                'pdfAppointmentAcceptance' => $certification->pdfAppointmentAcceptance,
+                'pdfCompanyConstitution' => $certification->pdfCompanyConstitution,
+            ];
+
+            foreach ($companyFiles as $field => $existingFile) {
+                if (!request()->hasFile($field) && !$existingFile) {
+                    $baseRules[$field] = 'required|file|mimes:pdf|max:10240';
+                } else {
+                    $baseRules[$field] = 'nullable|file|mimes:pdf|max:10240';
+                }
+            }
+        }
+
+        // Video para mayores de 65 años
+        $age = \Carbon\Carbon::parse(request('dateOfBirth'))->age;
+        if ($age >= 65) {
+            if (!request()->hasFile('authorizationVideo') && !$certification->authorizationVideo) {
+                $baseRules['authorizationVideo'] = 'required|file|mimes:mp4,mov,avi|max:10240';
+            } else {
+                $baseRules['authorizationVideo'] = 'nullable|file|mimes:mp4,mov,avi|max:10240';
+            }
+        }
+
+        return $baseRules;
     }
 }
