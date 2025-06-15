@@ -16,7 +16,7 @@ class FirmaSeguraService
 
     public function __construct()
     {
-        $this->apiUrl = config('services.firmasegura.api_url', 'https://api.dev-firmaseguraec.com');
+        $this->apiUrl = config('services.firmasegura.api_url');
         $this->apiKey = config('services.firmasegura.api_key');
         
         $this->client = new Client([

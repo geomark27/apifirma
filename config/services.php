@@ -36,7 +36,7 @@ return [
     ],
 
     'firmasegura' => [
-        'api_url' => env('FIRMASEGURA_API_URL', 'https://api.dev-firmaseguraec.com'),
+        'api_url' => env('FIRMASEGURA_API_URL'),
         'api_key' => env('FIRMASEGURA_API_KEY'),
         'environment' => env('FIRMASEGURA_ENVIRONMENT', 'development'),
         'timeout' => env('FIRMASEGURA_TIMEOUT', 60),
