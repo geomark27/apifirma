@@ -4,6 +4,7 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Certification;
+use App\Services\FirmaSeguraService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -268,21 +269,95 @@ class CertificationController extends Controller
     /**
      * Enviar certificación para revisión
      */
-    public function submit(Certification $certification)
+    public function submit(Certification $certification, FirmaSeguraService $firmaSeguraService)
     {
         $this->validateRole($certification);
 
+        // Verificar que se puede enviar
         if (!$certification->canBeSubmitted()) {
             return redirect()
                 ->route('user.certifications.show', $certification)
-                ->with('error', 'La certificación no está completa.');
+                ->with('error', 'La certificación no está completa o no se puede enviar en su estado actual.');
         }
 
-        $certification->markAsSubmitted();
+        // Verificar que no esté ya procesándose
+        if (in_array($certification->validationStatus, ['VALIDATING', 'APPROVED', 'GENERATED'])) {
+            return redirect()
+                ->route('user.certifications.show', $certification)
+                ->with('warning', 'Esta certificación ya está siendo procesada por FirmaSegura.');
+        }
 
-        return redirect()
-            ->route('user.certifications.show', $certification)
-            ->with('success', 'Certificación enviada para revisión.');
+        try {
+            // Enviar a FirmaSegura usando el servicio
+            $result = $firmaSeguraService->submitCertification($certification);
+
+            if ($result['success']) {
+                // Éxito
+                return redirect()
+                    ->route('user.certifications.show', $certification)
+                    ->with('success', 'Certificación enviada exitosamente a FirmaSegura para procesamiento.');
+            } else {
+                // Error controlado
+                return redirect()
+                    ->route('user.certifications.show', $certification)
+                    ->with('error', $result['message'])
+                    ->with('error_details', $result['error_details'] ?? null);
+            }
+
+        } catch (\Exception $e) {
+            // Error inesperado
+            Log::channel('debugging')->error('Error inesperado en submit de certificación', [
+                'certification_id' => $certification->id,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return redirect()
+                ->route('user.certifications.show', $certification)
+                ->with('error', 'Ocurrió un error inesperado. Por favor, intente nuevamente.');
+        }
+    }
+
+    /**
+     * Consultar estado actualizado de la certificación en FirmaSegura
+    */
+    public function refreshStatus(Certification $certification, FirmaSeguraService $firmaSeguraService)
+    {
+        $this->validateRole($certification);
+
+        // Solo consultar si ya fue enviada a FirmaSegura
+        if ($certification->validationStatus === 'REGISTERED' || $certification->status === 'draft') {
+            return redirect()
+                ->route('user.certifications.show', $certification)
+                ->with('warning', 'Esta certificación aún no ha sido enviada a FirmaSegura.');
+        }
+
+        try {
+            $result = $firmaSeguraService->checkCertificationStatus($certification);
+
+            if ($result['success']) {
+                return redirect()
+                    ->route('user.certifications.show', $certification)
+                    ->with('success', 'Estado actualizado correctamente.')
+                    ->with('status_data', $result['data'] ?? null);
+            } else {
+                return redirect()
+                    ->route('user.certifications.show', $certification)
+                    ->with('error', 'No se pudo consultar el estado de la certificación.');
+            }
+
+        } catch (\Exception $e) {
+            Log::channel('debugging')->error('Error al consultar estado de certificación', [
+                'certification_id' => $certification->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()
+                ->route('user.certifications.show', $certification)
+                ->with('error', 'Error al consultar el estado de la certificación.');
+        }
     }
 
     /**

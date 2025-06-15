@@ -150,6 +150,20 @@ export default function ShowCertification({
                                 Enviar para Revisión
                             </Button>
                         )}
+                        {certification.status !== 'draft' && (
+                            <Button
+                                onClick={() => {
+                                    if (confirm('¿Consultar el estado actualizado en FirmaSegura?')) {
+                                        router.post(route('user.certifications.refresh-status', certification.id));
+                                    }
+                                }}
+                                variant="outline"
+                                className="flex items-center gap-2"
+                            >
+                                <Eye className="h-4 w-4" />
+                                Consultar Estado
+                            </Button>
+                        )}
                         {canEdit && (
                             <Button asChild variant="outline">
                                 <Link href={route('user.certifications.edit', certification.id)}>

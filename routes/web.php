@@ -69,6 +69,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         
         // Descarga segura de archivos
         Route::get('download', [CertificationController::class, 'downloadFile'])->name('download');
+
+        // Certificaciones - rutas adicionales para FirmaSegura
+        Route::post('certifications/{certification}/submit', [CertificationController::class, 'submit'])->name('certifications.submit');
+        Route::post('certifications/{certification}/refresh-status', [CertificationController::class, 'refreshStatus'])->name('certifications.refresh-status');
+        Route::delete('certifications/{certification}', [CertificationController::class, 'destroy'])->name('certifications.destroy');
+    
     });
 
 

@@ -205,15 +205,6 @@ class Certification extends Model
     // Lógica de documentos requeridos
     // -------------------------------------------------
 
-    public function requiresCompanyDocuments(): bool
-    {
-        return $this->applicationType === 'LEGAL_REPRESENTATIVE'
-            || (
-                $this->applicationType === 'NATURAL_PERSON'
-                && ! empty($this->companyRuc)
-            );
-    }
-
     public function requiresAppointmentDocuments(): bool
     {
         return $this->applicationType === 'LEGAL_REPRESENTATIVE';
@@ -369,5 +360,168 @@ class Certification extends Model
     public static function calculateAge(string $dateOfBirth): int
     {
         return Carbon::parse($dateOfBirth)->diffInYears(Carbon::now());
+    }
+
+
+
+    /**
+     * Verificar si la certificación está en un estado que permite reenvío
+     */
+    public function canBeResubmitted(): bool
+    {
+        return in_array($this->status, ['draft', 'rejected']) 
+            && in_array($this->validationStatus, ['REGISTERED', 'ERROR', 'REFUSED'])
+            && $this->getCompletionPercentage() === 100
+            && $this->terms_accepted;
+    }
+
+    /**
+     * Verificar si se puede consultar el estado en FirmaSegura
+     */
+    public function canCheckStatus(): bool
+    {
+        return !in_array($this->validationStatus, ['REGISTERED']) 
+            && !empty($this->submitted_at)
+            && in_array($this->status, ['pending', 'in_review', 'approved', 'rejected']);
+    }
+
+    /**
+     * Obtener el último estado de FirmaSegura desde metadata
+     */
+    public function getLastFirmaSeguraResponse(): ?array
+    {
+        $metadata = $this->metadata ?? [];
+        return $metadata['last_status_response'] ?? $metadata['firmasegura_response'] ?? null;
+    }
+
+    /**
+     * Obtener mensajes de error de FirmaSegura
+     */
+    public function getFirmaSeguraErrorDetails(): ?string
+    {
+        $metadata = $this->metadata ?? [];
+        
+        // Error HTTP
+        if (isset($metadata['firmasegura_error']['response']['messages'])) {
+            $messages = $metadata['firmasegura_error']['response']['messages'];
+            return is_array($messages) ? implode(', ', $messages) : $messages;
+        }
+
+        // Error de conexión
+        if (isset($metadata['connection_error']['message'])) {
+            return $metadata['connection_error']['message'];
+        }
+
+        return $this->rejection_reason;
+    }
+
+    /**
+     * Verificar si necesita documentos empresariales
+     */
+    public function requiresCompanyDocuments(): bool
+    {
+        return $this->applicationType === 'LEGAL_REPRESENTATIVE' || 
+            ($this->applicationType === 'NATURAL_PERSON' && !empty($this->companyRuc));
+    }
+
+    /**
+     * Verificar si requiere video de autorización (>65 años)
+     */
+    public function requiresAuthorizationVideo(): bool
+    {
+        return $this->clientAge > 65;
+    }
+
+    /**
+     * Obtener color del badge según validationStatus
+     */
+    public function getValidationStatusColor(): string
+    {
+        return match($this->validationStatus) {
+            'REGISTERED' => 'blue',
+            'VALIDATING' => 'yellow',
+            'APPROVED' => 'green',
+            'GENERATED' => 'emerald',
+            'REFUSED', 'ERROR' => 'red',
+            'EXPIRED' => 'gray',
+            default => 'slate'
+        };
+    }
+
+    /**
+     * Obtener descripción amigable del validationStatus
+     */
+    public function getValidationStatusDescription(): string
+    {
+        return match($this->validationStatus) {
+            'REGISTERED' => 'Solicitud registrada, lista para enviar',
+            'VALIDATING' => 'En proceso de validación por FirmaSegura',
+            'APPROVED' => 'Aprobada, generando certificado',
+            'GENERATED' => 'Certificado generado y enviado por email',
+            'REFUSED' => 'Rechazada por documentación incorrecta',
+            'ERROR' => 'Error en procesamiento (ej: sin conexión Registro Civil)',
+            'EXPIRED' => 'Certificado expirado',
+            default => 'Estado desconocido'
+        };
+    }
+
+    /**
+     * Verificar si el estado permite edición
+     */
+    public function isEditable(): bool
+    {
+        return $this->canBeEdited() && in_array($this->validationStatus, ['REGISTERED', 'REFUSED', 'ERROR']);
+    }
+
+    /**
+     * Verificar si está en proceso activo en FirmaSegura
+     */
+    public function isActivelyProcessing(): bool
+    {
+        return in_array($this->validationStatus, ['VALIDATING', 'APPROVED']);
+    }
+
+    /**
+     * Verificar si el proceso está completo
+     */
+    public function isCompleted(): bool
+    {
+        return $this->validationStatus === 'GENERATED';
+    }
+
+    /**
+     * Verificar si hubo algún error
+     */
+    public function hasErrors(): bool
+    {
+        return in_array($this->validationStatus, ['REFUSED', 'ERROR']) || $this->status === 'rejected';
+    }
+
+    /**
+     * Actualizar desde respuesta de FirmaSegura
+     */
+    public function updateFromFirmaSeguraResponse(array $responseData): void
+    {
+        $validationStatus = $responseData['validationStatus'] ?? $this->validationStatus;
+        
+        // Determinar status interno basado en validationStatus
+        $internalStatus = match($validationStatus) {
+            'REGISTERED' => 'draft',
+            'VALIDATING' => 'in_review',
+            'APPROVED' => 'approved',
+            'GENERATED' => 'completed',
+            'REFUSED', 'ERROR' => 'rejected',
+            'EXPIRED' => 'rejected',
+            default => $this->status
+        };
+
+        $this->update([
+            'status' => $internalStatus,
+            'validationStatus' => $validationStatus,
+            'metadata' => array_merge($this->metadata ?? [], [
+                'last_status_response' => $responseData,
+                'last_status_check' => now()->toISOString()
+            ])
+        ]);
     }
 }
