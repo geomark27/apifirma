@@ -105,10 +105,9 @@ class CertificationController extends Controller
 
             DB::commit();
 
-            // **AHORA REDIRIGE AL INDEX DE CERTIFICACIONES**
             return redirect()
-                ->route('user.certifications.index')
-                ->with('success', 'Solicitud de certificación creada exitosamente.');
+                ->route('user.certifications.show', $certification)
+                    ->with('success', 'Solicitud de certificación creada exitosamente. Verifica los datos antes de enviar.');
 
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -248,8 +247,8 @@ class CertificationController extends Controller
             DB::commit();
 
             return redirect()
-                ->route('user.certifications.index')
-                ->with('success', 'Certificación actualizada exitosamente.');
+            ->route('user.certifications.show', $certification)
+            ->with('success', 'Solicitud de certificación actualizada exitosamente. Verifica los datos antes de enviar.');
 
         } catch (\Throwable $th) {
             DB::rollBack();
